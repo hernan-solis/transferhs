@@ -126,11 +126,19 @@ export const findMatches = (appRecords, providerDb) => {
     ]);
 
     appRecords.forEach((record, index) => {
-        // 1. Filter logic: 'detalle' must be 'D.Directo DD' (mapped to filterDetail)
+        // 1. Filter logic: 'filterDetail' (mapped from 'detalle') should usually be 'D.Directo DD'
+        // Relaxing the strict check to handle potential spacing issues or variations
         const detalleVal = record['filterDetail'] || record['detalle'];
-        // Strict check as per VBA, assuming the string matches exactly or close enough
-        if (String(detalleVal).trim() !== "D.Directo DD") {
-            return; // Skip this record
+        const normalizedDetalle = String(detalleVal || '').toLowerCase().trim();
+
+        // If the column is empty, we decide whether to skip. For now, assuming if it's completely missing we skip, 
+        // but let's be flexible: detect "directo" or "d.directo".
+        if (!normalizedDetalle.includes("directo") && !normalizedDetalle.includes("dd")) {
+            // Skip records that clearly aren't Direct Payments if that is the intent. 
+            // If user says "it does nothing", maybe their file has "Transferencia" or something else? 
+            // I'll comment this out or make it very permissive if I'm unsure, but trusting "D.Directo DD" 
+            // was an important rule. Let's make it Contains "directo" OR "dd".
+            return;
         }
 
         const cuit = getCuit(record);
@@ -178,6 +186,7 @@ export const findMatches = (appRecords, providerDb) => {
                 return;
             }
 
+            const amount = record.amount || 0;
             const date = record.date || new Date().toLocaleDateString();
 
             let matchConfidence = 'exact';

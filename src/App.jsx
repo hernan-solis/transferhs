@@ -12,20 +12,34 @@ function App() {
   const handleProviderUpload = async (file) => {
     try {
       const data = await parseExcel(file);
-      setProviderData(normalizeData(data));
+      const normalized = normalizeData(data);
+      console.log("Provider Data Loaded:", normalized.length, "rows");
+      if (normalized.length === 0) {
+        alert("El archivo de Proveedores parece no tener datos válidos o no se reconocieron las columnas (Cuit, RazSocial, CBU, etc).");
+        return;
+      }
+      setProviderData(normalized);
       setUploadSteps(prev => ({ ...prev, provider: true }));
     } catch (error) {
       console.error("Error parsing provider file:", error);
+      alert("Error al leer el archivo de proveedores");
     }
   };
 
   const handleAppUpload = async (file) => {
     try {
       const data = await parseExcel(file);
-      setAppData(normalizeData(data));
+      const normalized = normalizeData(data);
+      console.log("App Data Loaded:", normalized.length, "rows");
+      if (normalized.length === 0) {
+        alert("El archivo de la App parece no tener datos válidos o no se reconocieron las columnas.");
+        return;
+      }
+      setAppData(normalized);
       setUploadSteps(prev => ({ ...prev, app: true }));
     } catch (error) {
       console.error("Error parsing app file:", error);
+      alert("Error al leer el archivo de la app");
     }
   };
 
