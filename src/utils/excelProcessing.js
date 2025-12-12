@@ -65,7 +65,7 @@ export const normalizeData = (data) => {
             else if (normalizedKey === 'orden' || normalizedKey === 'op') newRow['paymentOrder'] = row[key]; // Capture Orden de Pago
             else if (normalizedKey === 'descrip') newRow['invoiceNumber'] = row[key]; // Description (001-...) used for logic
             else if (normalizedKey === 'descrip2' || normalizedKey === 'detalle_de_orden_de_pago' || normalizedKey === 'detalle_op') newRow['paymentDetail'] = row[key]; // Column R - Detalle de Orden de Pago
-            else if (normalizedKey === 'coment') newRow['emailMessage'] = row[key]; // Email Message (FAC...)
+            else if (normalizedKey === 'coment') newRow['paymentDetail'] = row[key]; // Column R (User confirmed 'coment' header is Col R)
 
             else if (normalizedKey === 'cuit' || normalizedKey === 'cuil') newRow['cuit'] = String(row[key]).replace(/[^0-9]/g, '');
             else if (normalizedKey === 'cbu') newRow['cbu'] = row[key];
@@ -259,7 +259,7 @@ export const generateBankFile = (selectedRecords) => {
             'CBU/CVU/Alias/Nro cuenta': rec.cbu,
             'Importe': Number(rec.amount),
             'Motivo': rec.motivo || 'Varios',
-            'Descripción (opcional)': rec.description || '', // Match visual (Column R / paymentDetail)
+            'Descripción (opcional)': rec.invoiceNumber || rec.paymentOrder || '', // "001-..." (User calls this 'n de op') // UPDATED
             'Email destinatario (opcional)': emailField,
             'Mensaje del email (opcional)': emailField ? (rec.paymentDetail || '') : ''
         };
