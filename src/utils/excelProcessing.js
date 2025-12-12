@@ -24,7 +24,7 @@ export const parseExcel = async (file) => {
                 // Find header row: look for row containing known keys
                 let headerRowIndex = 0;
                 // Extended known headers to include App file columns like 'haber', 'descrip'
-                const knownHeaders = ['cuit', 'razsocial', 'importe', 'detalle', 'cbu', 'nombre', 'haber', 'descrip', 'fecval'];
+                const knownHeaders = ['cuit', 'razsocial', 'importe', 'detalle', 'cbu', 'nombre', 'haber', 'descrip', 'descrip2', 'fecval'];
 
                 for (let i = 0; i < Math.min(rawRows.length, 15); i++) {
                     const rowStr = JSON.stringify(rawRows[i]).toLowerCase();
@@ -37,7 +37,8 @@ export const parseExcel = async (file) => {
                 }
 
                 // Now parse again using this header row
-                const jsonData = utils.sheet_to_json(sheet, { range: headerRowIndex });
+                let jsonData = utils.sheet_to_json(sheet, { range: headerRowIndex });
+
                 resolve(jsonData);
             } catch (error) {
                 reject(error);
@@ -61,9 +62,9 @@ export const normalizeData = (data) => {
             // Map specific Spanish columns to internal keys
             if (normalizedKey === 'razsocial' || normalizedKey === 'beneficiario') newRow['providerName'] = row[key];
             else if (normalizedKey === 'haber') newRow['amount'] = row[key]; // Amount
-            else if (normalizedKey === 'detalle') newRow['filterDetail'] = row[key]; // For filtering D.Directo DD
             else if (normalizedKey === 'orden' || normalizedKey === 'op') newRow['paymentOrder'] = row[key]; // Capture Orden de Pago
             else if (normalizedKey === 'descrip') newRow['invoiceNumber'] = row[key]; // Description (001-...) used for logic
+            else if (normalizedKey === 'descrip2' || normalizedKey === 'detalle_de_orden_de_pago' || normalizedKey === 'detalle_op') newRow['paymentDetail'] = row[key]; // Column R - Detalle de Orden de Pago
             else if (normalizedKey === 'coment') newRow['emailMessage'] = row[key]; // Email Message (FAC...)
 
             else if (normalizedKey === 'cuit' || normalizedKey === 'cuil') newRow['cuit'] = String(row[key]).replace(/[^0-9]/g, '');
@@ -73,6 +74,9 @@ export const normalizeData = (data) => {
 
             newRow[normalizedKey] = row[key];
         });
+
+
+
 
         // Fill defaults
         if (!newRow.providerName && newRow.nombre) newRow.providerName = newRow.nombre;
@@ -116,136 +120,122 @@ export const findMatches = (appRecords, providerDb) => {
         if (cuit) providerMap.set(cuit, row);
     });
 
+    const summary = {
+        totalRecords: appRecords.length,
+        ignoredByFilter: 0,
+        matched: 0,
+        noMatch: 0
+    };
+
     const matches = [];
     const unmatched = [];
 
-    // Special CUITs list from VBA script to exclude
+    // Special CUITs list from VBA script
     const specialCuits = new Set([
         "20271370440", "20280864588", "20304161923",
         "20264164371", "20313523862", "20180310046"
     ]);
 
     appRecords.forEach((record, index) => {
-        // 1. Filter logic: 'filterDetail' (mapped from 'detalle') should usually be 'D.Directo DD'
-        // Relaxing the strict check to handle potential spacing issues or variations
+        // 1. Filter logic: 'detalle' must be "D.Directo DD"
+        // We accept variations like "Directo" or "DD" to be safe with spacing/casing
         const detalleVal = record['filterDetail'] || record['detalle'];
         const normalizedDetalle = String(detalleVal || '').toLowerCase().trim();
 
-        // If the column is empty, we decide whether to skip. For now, assuming if it's completely missing we skip, 
-        // but let's be flexible: detect "directo" or "d.directo".
         if (!normalizedDetalle.includes("directo") && !normalizedDetalle.includes("dd")) {
-            // Skip records that clearly aren't Direct Payments if that is the intent. 
-            // If user says "it does nothing", maybe their file has "Transferencia" or something else? 
-            // I'll comment this out or make it very permissive if I'm unsure, but trusting "D.Directo DD" 
-            // was an important rule. Let's make it Contains "directo" OR "dd".
+            summary.ignoredByFilter++;
             return;
         }
 
         const cuit = getCuit(record);
+        // Clean matching: logic uses CUIT without hyphens
+        const cleanCuit = cuit ? cuit.replace(/-/g, '') : "";
 
-        // EXCLUDE special CUITs (Anticipos Choferes) as requested
-        if (cuit && specialCuits.has(cuit)) {
+        // Explicitly exclude strict blacklist CUITs (e.g. 30500001735, 30718743105)
+        if (cleanCuit === '30500001735' || cleanCuit === '30718743105') {
+            summary.ignoredByBlacklist = (summary.ignoredByBlacklist || 0) + 1;
             return;
         }
 
-        const cuitVal = String(cuit || "");
+        // EXCLUDE 'Anticipo Choferes' (Special CUITs) for now as requested
+        if (specialCuits.has(cleanCuit)) {
+            summary.ignoredBySpecialCuit++;
+            return;
+        }
 
-        // Attempt standard match
-        if (cuit && providerMap.has(cuit)) {
-            const provider = providerMap.get(cuit);
+        let motivo = "Varios";
 
+        // Logic for Payment Order (orden): Last 12 chars
+        let rawOp = record['paymentOrder'] || record['orden'] || '';
+        let strOp = String(rawOp).trim();
+        let paymentOrder = strOp.length > 12 ? strOp.slice(-12) : strOp;
+
+        const invoiceNumber = record['invoiceNumber'] || record['descrip'] || '';
+        const paymentDetail = record['paymentDetail'] || record['descrip2'] || '';
+
+        // Note: VBA puts Email from Agenda into 'descrip' column. 
+        // We will store it in 'email' field and use it for export.
+
+        const amount = record.amount || 0;
+        const date = record.date || new Date().toLocaleDateString();
+
+        // Find Provider Match
+        // We look up by clean CUIT
+        if (cleanCuit && providerMap.has(cleanCuit)) {
+            const provider = providerMap.get(cleanCuit);
             const providerName = provider.nombre || provider.razon_social || provider.proveedor || 'Proveedor Encontrado';
 
-            // Exclude specific providers by name as requested
-            if (providerName.toLowerCase().includes("carganet")) {
-                return;
-            }
-
+            // Map fields from Agenda
             const cbu = provider.cbu || provider.cuenta || '';
             const email = provider['email'] || provider['email_destinatario'] || '';
 
-            // User's 'orden' mapped to paymentOrder
-            let rawOp = record['paymentOrder'] || record['orden'] || '';
-            let paymentOrder = '';
-            if (rawOp) {
-                const strOp = String(rawOp).trim();
-                // User requested last 10 characters (e.g. 1-00078331)
-                paymentOrder = strOp.length > 10 ? strOp.slice(-10) : strOp;
-            }
-
-            // User's 'descrip' mapped to invoiceNumber (used for logic)
-            const invoiceNumber = record['invoiceNumber'] || record['descrip'] || '';
-            // User's 'coment' mapped to emailMessage
-            const emailMessage = record['emailMessage'] || record['coment'] || '';
-
-            // Fallback description for display if needed
-            const displayDesc = paymentOrder ? `OP: ${paymentOrder}` : (invoiceNumber || 'Varios');
-
-            // Exclude records that look like Retentions
-            if (String(invoiceNumber).toLowerCase().includes("retenci") || String(emailMessage).toLowerCase().includes("retenci")) {
-                return;
-            }
-
-            const amount = record.amount || 0;
-            const date = record.date || new Date().toLocaleDateString();
-
-            let matchConfidence = 'exact';
-            let error = null;
-
-            if (!cbu) {
-                matchConfidence = 'warning';
-                error = 'Falta CBU en la base de proveedores';
-            }
+            // VBA: If special char in invoice/comment, originally ignored, but Macro provided REMOVED that check. 
+            // We blindly accept as the macro does, unless specific instructions say otherwise.
 
             matches.push({
                 id: `match-${index}`,
                 originalId: index,
-                cuit,
+                cuit: cleanCuit,
                 providerName,
                 cbu,
                 paymentOrder,
-                invoiceNumber,
-                emailMessage,
-                email,
+                invoiceNumber, // This is 'descrip' from App file currently.
+                paymentDetail, // This is 'descrip2' (Column R)
+                motivo,        // New field for 'Motivo'
+                email,         // Fill from Provider
                 amount,
                 date,
                 status: 'ready',
-                matchConfidence,
-                error,
-                description: displayDesc, // For UI display
+                matchConfidence: 'exact',
+                description: paymentDetail || invoiceNumber || `OP: ${paymentOrder}` // Default description to paymentDetail if available
             });
+            summary.matched++;
         } else {
-            // Case: CUIT exists in App file but NOT in Provider DB
-            // We still want to show this to the user so they know it failed
-            const rawOp = record['paymentOrder'] || record['orden'] || '';
-            const paymentOrder = rawOp.length > 10 ? rawOp.slice(-10) : rawOp;
-            const invoiceNumber = record['invoiceNumber'] || record['descrip'] || '';
-            const displayDesc = paymentOrder ? `OP: ${paymentOrder}` : (invoiceNumber || 'Varios');
-            const amount = record.amount || 0;
-            const date = record.date || new Date().toLocaleDateString();
-
+            // No Match Found in Agenda
+            // VBA: Leaves CBU and Email empty. Does NOT delete the row.
             matches.push({
                 id: `nomatch-${index}`,
                 originalId: index,
-                cuit: cuit || 'Sin CUIT',
-                providerName: 'NO ENCONTRADO',
-                cbu: '',
+                cuit: cleanCuit || 'Sin CUIT',
+                providerName: 'NO ENCONTRADO EN AGENDA',
+                cbu: '', // Empty as per VBA logic (clears cell)
                 paymentOrder,
                 invoiceNumber,
-                emailMessage: '',
-                email: '',
+                paymentDetail, // This is 'descrip2' (Column R)
+                motivo,
+                email: '', // Empty
                 amount,
                 date,
-                status: 'error',
+                status: 'error', // UI will show red
                 matchConfidence: 'no_match',
-                error: 'Proveedor no existe en la base',
-                description: displayDesc,
+                error: 'Falta en Agenda',
+                description: paymentDetail || invoiceNumber || `OP: ${paymentOrder}`
             });
+            summary.noMatch++;
         }
-        // We can handle unmatched logic if needed
     });
 
-    return { matches, unmatched };
+    return { matches, unmatched, summary };
 };
 
 export const generateBankFile = (selectedRecords) => {
@@ -262,15 +252,17 @@ export const generateBankFile = (selectedRecords) => {
     // Map to specific requested columns
     const dataToExport = selectedRecords.map(rec => {
         const includeEmail = shouldIncludeEmail(rec.providerName);
+        const emailField = includeEmail ? rec.email : '';
 
         // Header format matches user request
         return {
             'CBU/CVU/Alias/Nro cuenta': rec.cbu,
             'Importe': Number(rec.amount), // Ensure number for Excel
-            'Motivo': 'Varios',
-            'Descripción (opcional)': rec.paymentOrder || '', // Strictly OP now
-            'Email destinatario (opcional)': includeEmail ? rec.email : '',
-            'Mensaje del email (opcional)': (includeEmail && rec.invoiceNumber && rec.emailMessage) ? rec.emailMessage : ''
+            'Motivo': rec.motivo || 'Varios', // Now dynamic based on special CUITs
+            'Descripción (opcional)': rec.paymentDetail || rec.invoiceNumber || '',
+            'Referencia (OP)': rec.paymentOrder || '',
+            'Email destinatario (opcional)': emailField,
+            'Mensaje del email (opcional)': emailField ? (rec.paymentDetail || '') : '' // Column G populated with Col R if F is present
         };
     });
 

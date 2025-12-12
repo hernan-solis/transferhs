@@ -154,8 +154,8 @@ const TransferTable = ({ data = [], onExport, onSelectionChange }) => {
                                     <td className="px-6 py-4 text-gray-400 font-mono text-xs font-bold text-primary-200">
                                         {row.paymentOrder || '-'}
                                     </td>
-                                    <td className="px-6 py-4 text-gray-400 text-xs max-w-xs truncate" title={row.invoiceNumber}>
-                                        {row.invoiceNumber || '-'}
+                                    <td className="px-6 py-4 text-gray-400 text-xs max-w-xs truncate" title={row.paymentDetail || row.invoiceNumber}>
+                                        {row.paymentDetail || row.invoiceNumber || '-'}
                                     </td>
                                     <td className="px-6 py-4 text-right font-medium text-white whitespace-nowrap">
                                         {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(row.amount)}

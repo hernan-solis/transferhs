@@ -44,13 +44,28 @@ function App() {
   };
 
   const handleProcessMatches = () => {
-    if (providerData.length === 0 || appData.length === 0) return;
+    console.log("Processing matches...", { providerCount: providerData.length, appCount: appData.length });
+    if (providerData.length === 0 || appData.length === 0) {
+      console.warn("Cannot process: missing data");
+      return;
+    }
 
-    const { matches } = findMatches(appData, providerData);
+    const { matches, summary } = findMatches(appData, providerData);
     setMatchedData(matches);
 
     if (matches.length === 0) {
-      alert("No se encontraron coincidencias automáticas (buscando CUITs comunes).");
+      let msg = "No se encontraron registros para procesar.\n\nDetalles del análisis:\n";
+      msg += `- Total en archivo App: ${summary.totalRecords}\n`;
+      msg += `- Ignorados por Filtro "Detalle" (no es "D.Directo DD"): ${summary.ignoredByFilter}\n`;
+      msg += `- Ignorados por CUIT Especial: ${summary.ignoredBySpecialCuit}\n`;
+      msg += `- Ignorados por Nombre Proveedor (Carganet, etc): ${summary.ignoredByProviderName}\n`;
+      msg += `- Ignorados por Retenciones/Reembolso: ${summary.ignoredByBlacklist}\n`;
+      // msg += `- Sin coincidencia CUIT: ${summary.noMatch}\n`; // These are actually included in matches array as error items
+
+      alert(msg);
+    } else {
+      // Log stats for debugging
+      console.log("Match Summary:", summary);
     }
   };
 
@@ -65,8 +80,8 @@ function App() {
   const [selectedToExport, setSelectedToExport] = useState([]);
 
   return (
-    <div className="min-h-screen bg-dark-950 p-6 md:p-12 text-white selection:bg-primary-500/30 font-sans">
-      <div className="max-w-7xl mx-auto space-y-12">
+    <div className="min-h-screen bg-dark-950 p-4 md:p-8 text-white selection:bg-primary-500/30 font-sans">
+      <div className="w-[95%] mx-auto space-y-12">
 
         {/* Header */}
         <header className="text-center space-y-4 animate-in slide-in-from-top-8 duration-700 fade-in">
