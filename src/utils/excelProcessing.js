@@ -259,7 +259,7 @@ export const generateBankFile = (selectedRecords) => {
             'CBU/CVU/Alias/Nro cuenta': rec.cbu,
             'Importe': Number(rec.amount),
             'Motivo': rec.motivo || 'Varios',
-            'Descripción (opcional)': rec.invoiceNumber || rec.paymentOrder || '', // "001-..." (User calls this 'n de op') // UPDATED
+            'Descripción (opcional)': rec.paymentOrder || '', // User explicitly requested "N° OP" here
             'Email destinatario (opcional)': emailField,
             'Mensaje del email (opcional)': emailField ? (rec.paymentDetail || '') : ''
         };
