@@ -113,6 +113,7 @@ const TransferTable = ({ data = [], onExport, onSelectionChange }) => {
                                 <th scope="col" className="px-6 py-3">Fecha</th>
                                 <th scope="col" className="px-6 py-3">Proveedor</th>
                                 <th scope="col" className="px-6 py-3">CUIT</th>
+                                <th scope="col" className="px-6 py-3">CBU</th>
                                 <th scope="col" className="px-6 py-3">Detalle</th>
                                 <th scope="col" className="px-6 py-3 text-right">Monto</th>
                                 <th scope="col" className="px-6 py-3 text-center">Estado</th>
@@ -140,18 +141,30 @@ const TransferTable = ({ data = [], onExport, onSelectionChange }) => {
                                     <td className="px-6 py-4 text-gray-300 whitespace-nowrap">{row.date}</td>
                                     <td className="px-6 py-4 font-medium text-white whitespace-nowrap">{row.providerName}</td>
                                     <td className="px-6 py-4 text-gray-400 font-mono text-xs">{row.cuit}</td>
+                                    <td className="px-6 py-4 text-gray-400 font-mono text-xs">
+                                        {row.cbu ? (
+                                            row.cbu
+                                        ) : (
+                                            <span className="flex items-center gap-1 text-orange-400 font-bold">
+                                                <AlertCircle size={14} /> Faltante
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="px-6 py-4 text-gray-400 max-w-xs truncate">{row.description}</td>
                                     <td className="px-6 py-4 text-right font-medium text-white whitespace-nowrap">
                                         {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(row.amount)}
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <span className={cn(
-                                            "px-2 py-1 rounded-full text-xs font-medium border",
+                                            "px-2 py-1 rounded-full text-xs font-medium border whitespace-nowrap",
                                             row.matchConfidence === 'exact'
                                                 ? "bg-green-500/10 text-green-400 border-green-500/20"
-                                                : "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+                                                : row.matchConfidence === 'warning'
+                                                    ? "bg-orange-500/10 text-orange-400 border-orange-500/20"
+                                                    : "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
                                         )}>
-                                            {row.matchConfidence === 'exact' ? 'Exacto' : 'Parcial'}
+                                            {row.matchConfidence === 'exact' ? 'Exacto' :
+                                                row.matchConfidence === 'warning' ? 'Revisar' : 'Parcial'}
                                         </span>
                                     </td>
                                 </tr>

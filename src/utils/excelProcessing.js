@@ -178,8 +178,15 @@ export const findMatches = (appRecords, providerDb) => {
                 return;
             }
 
-            const amount = record.amount || 0;
             const date = record.date || new Date().toLocaleDateString();
+
+            let matchConfidence = 'exact';
+            let error = null;
+
+            if (!cbu) {
+                matchConfidence = 'warning';
+                error = 'Falta CBU en la base de proveedores';
+            }
 
             matches.push({
                 id: `match-${index}`,
@@ -194,7 +201,8 @@ export const findMatches = (appRecords, providerDb) => {
                 amount,
                 date,
                 status: 'ready',
-                matchConfidence: 'exact',
+                matchConfidence,
+                error,
                 description: displayDesc, // For UI display
             });
         }
