@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import FileUpload from './components/FileUpload';
-import TransferTable from './components/TransferTable';
+import FileUpload from './components/FileUpload.jsx';
+import TransferTable from './components/TransferTable.jsx';
 import { parseExcel, normalizeData, findMatches, generateBankFile } from './utils/excelProcessing';
 
 function App() {
