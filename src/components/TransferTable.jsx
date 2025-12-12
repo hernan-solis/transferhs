@@ -114,6 +114,7 @@ const TransferTable = ({ data = [], onExport, onSelectionChange }) => {
                                 <th scope="col" className="px-6 py-3">Proveedor</th>
                                 <th scope="col" className="px-6 py-3">CUIT</th>
                                 <th scope="col" className="px-6 py-3">CBU</th>
+                                <th scope="col" className="px-6 py-3">N° OP</th>
                                 <th scope="col" className="px-6 py-3">Detalle</th>
                                 <th scope="col" className="px-6 py-3 text-right">Monto</th>
                                 <th scope="col" className="px-6 py-3 text-center">Estado</th>
@@ -150,7 +151,12 @@ const TransferTable = ({ data = [], onExport, onSelectionChange }) => {
                                             </span>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 text-gray-400 max-w-xs truncate">{row.description}</td>
+                                    <td className="px-6 py-4 text-gray-400 font-mono text-xs font-bold text-primary-200">
+                                        {row.paymentOrder || '-'}
+                                    </td>
+                                    <td className="px-6 py-4 text-gray-400 text-xs max-w-xs truncate" title={row.invoiceNumber}>
+                                        {row.invoiceNumber || '-'}
+                                    </td>
                                     <td className="px-6 py-4 text-right font-medium text-white whitespace-nowrap">
                                         {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(row.amount)}
                                     </td>
