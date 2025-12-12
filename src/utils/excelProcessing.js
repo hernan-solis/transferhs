@@ -254,26 +254,25 @@ export const generateBankFile = (selectedRecords) => {
         const includeEmail = shouldIncludeEmail(rec.providerName);
         const emailField = includeEmail ? rec.email : '';
 
-        // Header format matches user request
+        // Header format matches user request and screenshot (6 columns)
         return {
             'CBU/CVU/Alias/Nro cuenta': rec.cbu,
-            'Importe': Number(rec.amount), // Ensure number for Excel
-            'Motivo': rec.motivo || 'Varios', // Now dynamic based on special CUITs
-            'Descripción (opcional)': rec.paymentDetail || rec.invoiceNumber || '',
-            'Referencia (OP)': rec.paymentOrder || '',
+            'Importe': Number(rec.amount),
+            'Motivo': rec.motivo || 'Varios',
+            'Descripción (opcional)': rec.invoiceNumber || rec.paymentOrder || '', // "001-..." (User calls this 'n de op')
             'Email destinatario (opcional)': emailField,
-            'Mensaje del email (opcional)': emailField ? (rec.paymentDetail || '') : '' // Column G populated with Col R if F is present
+            'Mensaje del email (opcional)': emailField ? (rec.paymentDetail || '') : ''
         };
     });
 
     const ws = utils.json_to_sheet(dataToExport);
 
-    // Adjust column widths for better UX in the output file
+    // Adjust column widths
     const wscols = [
         { wch: 25 }, // CBU
         { wch: 15 }, // Importe
         { wch: 10 }, // Motivo
-        { wch: 20 }, // Descripción
+        { wch: 25 }, // Descripción
         { wch: 30 }, // Email
         { wch: 30 }  // Mensaje
     ];
