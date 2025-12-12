@@ -21,14 +21,15 @@ export const parseExcel = async (file) => {
                 // Convert to array of arrays first to find the header row
                 const rawRows = utils.sheet_to_json(sheet, { header: 1 });
 
-                // Find header row: look for row containing 'cuit' or 'razsocial' or 'nombre'
+                // Find header row: look for row containing known keys
                 let headerRowIndex = 0;
-                const knownHeaders = ['cuit', 'razsocial', 'importe', 'detalle', 'cbu', 'nombre'];
+                // Extended known headers to include App file columns like 'haber', 'descrip'
+                const knownHeaders = ['cuit', 'razsocial', 'importe', 'detalle', 'cbu', 'nombre', 'haber', 'descrip', 'fecval'];
 
-                for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
+                for (let i = 0; i < Math.min(rawRows.length, 15); i++) {
                     const rowStr = JSON.stringify(rawRows[i]).toLowerCase();
                     const matchCount = knownHeaders.filter(h => rowStr.includes(h)).length;
-                    // Lower threshold to 1 if we find 'cuit' specifically, as it is unique
+
                     if (matchCount >= 2 || (rowStr.includes('cuit') && rowStr.includes('nombre'))) {
                         headerRowIndex = i;
                         break;
@@ -59,22 +60,25 @@ export const normalizeData = (data) => {
 
             // Map specific Spanish columns to internal keys
             if (normalizedKey === 'razsocial' || normalizedKey === 'beneficiario') newRow['providerName'] = row[key];
-            else if (normalizedKey === 'haber') newRow['amount'] = row[key]; // Screenshot confirms 'haber' has the values
-            else if (normalizedKey === 'detalle') newRow['filterDetail'] = row[key]; // Keep for D.Directo DD check
-            else if (normalizedKey === 'coment') newRow['description'] = row[key]; // Screenshot 'coment' has the rich detail
+            else if (normalizedKey === 'haber') newRow['amount'] = row[key]; // Amount
+            else if (normalizedKey === 'detalle') newRow['filterDetail'] = row[key]; // For filtering D.Directo DD
+            else if (normalizedKey === 'orden' || normalizedKey === 'op') newRow['paymentOrder'] = row[key]; // Capture Orden de Pago
+            else if (normalizedKey === 'descrip') newRow['invoiceNumber'] = row[key]; // Description (001-...) used for logic
+            else if (normalizedKey === 'coment') newRow['emailMessage'] = row[key]; // Email Message (FAC...)
+
             else if (normalizedKey === 'cuit' || normalizedKey === 'cuil') newRow['cuit'] = String(row[key]).replace(/[^0-9]/g, '');
             else if (normalizedKey === 'cbu') newRow['cbu'] = row[key];
             else if (normalizedKey === 'fecha' || normalizedKey === 'fecval') newRow['date'] = row[key];
+            else if (normalizedKey === 'email_destinatario' || normalizedKey === 'email') newRow['email'] = row[key];
 
             newRow[normalizedKey] = row[key];
         });
 
-        // Fill defaults if missing from mapping but present in raw normalized keys
+        // Fill defaults
         if (!newRow.providerName && newRow.nombre) newRow.providerName = newRow.nombre;
-        // Final fallback logic for amount
+        // Fallback for amount
         if (!newRow.amount && newRow.monto) newRow.amount = newRow.monto;
-        if (!newRow.amount && newRow.importe) newRow.amount = newRow.importe; // Fallback if Haber is missing
-
+        if (!newRow.amount && newRow.importe) newRow.amount = newRow.importe;
 
         return { ...row, ...newRow };
     });
@@ -115,16 +119,16 @@ export const findMatches = (appRecords, providerDb) => {
     const matches = [];
     const unmatched = [];
 
-    // Special CUITs list from VBA script
+    // Special CUITs list from VBA script to exclude
     const specialCuits = new Set([
         "20271370440", "20280864588", "20304161923",
         "20264164371", "20313523862", "20180310046"
     ]);
 
     appRecords.forEach((record, index) => {
-        // 1. Filter logic: 'detalle' must be 'D.Directo DD'
-        // We mapped 'detalle' to 'filterDetail' in normalizeData
+        // 1. Filter logic: 'detalle' must be 'D.Directo DD' (mapped to filterDetail)
         const detalleVal = record['filterDetail'] || record['detalle'];
+        // Strict check as per VBA, assuming the string matches exactly or close enough
         if (String(detalleVal).trim() !== "D.Directo DD") {
             return; // Skip this record
         }
@@ -150,13 +154,27 @@ export const findMatches = (appRecords, providerDb) => {
             }
 
             const cbu = provider.cbu || provider.cuenta || '';
-            const email = provider['Email destinatario'] || provider.email || '';
+            const email = provider['email'] || provider['email_destinatario'] || '';
 
-            // User says "coment" is the detail. We mapped 'coment' -> 'description'.
-            const realDetail = record['description'] || record['coment'] || 'Varios';
+            // User's 'orden' mapped to paymentOrder
+            let rawOp = record['paymentOrder'] || record['orden'] || '';
+            let paymentOrder = '';
+            if (rawOp) {
+                const strOp = String(rawOp).trim();
+                // User requested last 10 characters (e.g. 1-00078331)
+                paymentOrder = strOp.length > 10 ? strOp.slice(-10) : strOp;
+            }
 
-            // Exclude records that look like Retentions if not needed
-            if (String(realDetail).toLowerCase().includes("retenci")) {
+            // User's 'descrip' mapped to invoiceNumber (used for logic)
+            const invoiceNumber = record['invoiceNumber'] || record['descrip'] || '';
+            // User's 'coment' mapped to emailMessage
+            const emailMessage = record['emailMessage'] || record['coment'] || '';
+
+            // Fallback description for display if needed
+            const displayDesc = paymentOrder ? `OP: ${paymentOrder}` : (invoiceNumber || 'Varios');
+
+            // Exclude records that look like Retentions
+            if (String(invoiceNumber).toLowerCase().includes("retenci") || String(emailMessage).toLowerCase().includes("retenci")) {
                 return;
             }
 
@@ -169,51 +187,64 @@ export const findMatches = (appRecords, providerDb) => {
                 cuit,
                 providerName,
                 cbu,
-                description: realDetail,
+                paymentOrder,
+                invoiceNumber,
+                emailMessage,
                 email,
                 amount,
                 date,
                 status: 'ready',
                 matchConfidence: 'exact',
-                originalRecord: record,
-                providerRecord: provider
-            });
-        } else {
-            const realDetail = record['description'] || record['coment'] || 'Varios';
-
-            // Exclude Carganet and Retentions here too just in case
-            if (String(realDetail).toLowerCase().includes("retenci")) return;
-
-            unmatched.push({
-                id: `unmatched-${index}`,
-                cuit,
-                providerName: 'Proveedor Desconocido',
-                cbu: '',
-                description: realDetail,
-                amount: record.amount || 0,
-                date: record.date,
-                matchConfidence: 'none'
+                description: displayDesc, // For UI display
             });
         }
+        // We can handle unmatched logic if needed
     });
 
     return { matches, unmatched };
 };
 
 export const generateBankFile = (selectedRecords) => {
-    // Headers based on typical bank requirements (can be customized)
-    const dataToExport = selectedRecords.map(rec => ({
-        'CBU Destino': rec.cbu,
-        'CUIT Destino': rec.cuit,
-        'Importe': rec.amount,
-        'Referencia': rec.description,
-        'Fecha': rec.date,
-        'Beneficiario': rec.providerName
-    }));
+    // Whitelist for emails
+    const emailWhitelist = ["trinidad", "stefanazzi", "vialidad"];
+
+    // Check if provider name contains any whitelist keyword
+    const shouldIncludeEmail = (name) => {
+        if (!name) return false;
+        const lowerName = name.toLowerCase();
+        return emailWhitelist.some(keyword => lowerName.includes(keyword));
+    };
+
+    // Map to specific requested columns
+    const dataToExport = selectedRecords.map(rec => {
+        const includeEmail = shouldIncludeEmail(rec.providerName);
+
+        // Header format matches user request
+        return {
+            'CBU/CVU/Alias/Nro cuenta': rec.cbu,
+            'Importe': Number(rec.amount), // Ensure number for Excel
+            'Motivo': 'Varios',
+            'Descripción (opcional)': rec.paymentOrder || '', // Strictly OP now
+            'Email destinatario (opcional)': includeEmail ? rec.email : '',
+            'Mensaje del email (opcional)': (includeEmail && rec.invoiceNumber && rec.emailMessage) ? rec.emailMessage : ''
+        };
+    });
 
     const ws = utils.json_to_sheet(dataToExport);
+
+    // Adjust column widths for better UX in the output file
+    const wscols = [
+        { wch: 25 }, // CBU
+        { wch: 15 }, // Importe
+        { wch: 10 }, // Motivo
+        { wch: 20 }, // Descripción
+        { wch: 30 }, // Email
+        { wch: 30 }  // Mensaje
+    ];
+    ws['!cols'] = wscols;
+
     const wb = utils.book_new();
-    utils.book_append_sheet(wb, ws, "Transferencias");
+    utils.book_append_sheet(wb, ws, "Formulario"); // Sheet name 'Formulario' matches VBA
 
     // Generate download
     const wbout = write(wb, { bookType: 'xlsx', type: 'array' });

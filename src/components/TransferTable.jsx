@@ -86,7 +86,7 @@ const TransferTable = ({ data = [], onExport, onSelectionChange }) => {
                     )}
                 >
                     <Download size={18} />
-                    Exportar Bank File
+                    Descargar Excel Banco
                 </button>
             </div>
 
