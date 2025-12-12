@@ -205,6 +205,33 @@ export const findMatches = (appRecords, providerDb) => {
                 error,
                 description: displayDesc, // For UI display
             });
+        } else {
+            // Case: CUIT exists in App file but NOT in Provider DB
+            // We still want to show this to the user so they know it failed
+            const rawOp = record['paymentOrder'] || record['orden'] || '';
+            const paymentOrder = rawOp.length > 10 ? rawOp.slice(-10) : rawOp;
+            const invoiceNumber = record['invoiceNumber'] || record['descrip'] || '';
+            const displayDesc = paymentOrder ? `OP: ${paymentOrder}` : (invoiceNumber || 'Varios');
+            const amount = record.amount || 0;
+            const date = record.date || new Date().toLocaleDateString();
+
+            matches.push({
+                id: `nomatch-${index}`,
+                originalId: index,
+                cuit: cuit || 'Sin CUIT',
+                providerName: 'NO ENCONTRADO',
+                cbu: '',
+                paymentOrder,
+                invoiceNumber,
+                emailMessage: '',
+                email: '',
+                amount,
+                date,
+                status: 'error',
+                matchConfidence: 'no_match',
+                error: 'Proveedor no existe en la base',
+                description: displayDesc,
+            });
         }
         // We can handle unmatched logic if needed
     });
