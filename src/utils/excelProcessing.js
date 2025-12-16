@@ -163,6 +163,13 @@ export const findMatches = (appRecords, providerDb) => {
             return;
         }
 
+        // EXCLUDE "11111111111" and EMPTY CUITs
+        if (cleanCuit === '11111111111' || !cleanCuit || cleanCuit === 'Sin CUIT') {
+            // We can reuse a summary counter or just ignore silently
+            summary.ignoredBySpecialCuit++; // reusing this for simplicity or create new key
+            return;
+        }
+
         let motivo = "Varios";
 
         // Logic for Payment Order (orden): Last 12 chars
