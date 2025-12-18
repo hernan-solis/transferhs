@@ -115,7 +115,7 @@ function App() {
         {/* Header */}
         <header className="text-center space-y-4 animate-in slide-in-from-top-8 duration-700 fade-in">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight bg-gradient-to-r from-white via-primary-200 to-primary-400 bg-clip-text text-transparent">
-            Procesador de Transferencias
+            Procesador de Transferencias HS
           </h1>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
             Sube tus archivos para cruzar datos y generar el archivo de transferencias bancarias automáticamente.
