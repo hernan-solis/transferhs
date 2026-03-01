@@ -104,11 +104,29 @@ export const generateEcheqData = (appData, providerData = []) => {
             }
         }
 
+        // Safely parse amount as Number
+        let rawAmount = getVal('haber') || getVal('Haber') || 0;
+        let numAmount = Number(rawAmount);
+
+        if (isNaN(numAmount) || typeof rawAmount === 'string') {
+            // Handle string formats, particularly Argentine (e.g., "1.234,50" or "$ 1234,50")
+            let strAmount = String(rawAmount).trim();
+            if (strAmount.includes(',')) {
+                // Remove periods (thousands separators if any)
+                strAmount = strAmount.replace(/\./g, '');
+                // Replace comma with dot for decimals
+                strAmount = strAmount.replace(',', '.');
+            }
+            // Strip out any remaining non-numeric characters (like $ signs) 
+            // but keep the decimal point
+            numAmount = Number(strAmount.replace(/[^0-9.-]+/g, ""));
+        }
+
         return {
             'Tipo de documento': 'CUIT',
             'Nro. de documento': cuit,
             'Razon Social': rsocial, // Added for display purposes
-            'Monto': getVal('haber') || getVal('Haber') || 0,
+            'Monto': numAmount || 0,
             'Fecha de pago': excelDateToDDMMYYYY(getVal('fcheqpro') || getVal('Fcheqpro')),
             'Motivo de pago': 'FACTURA',
             'Descripcion 1': desc1,
