@@ -158,6 +158,30 @@ export const downloadEcheqFiles = (data) => {
         const cleanChunk = chunk.map(({ 'Razon Social': _, ...rest }) => rest);
 
         const ws = utils.json_to_sheet(cleanChunk);
+
+        // FIX: Force explicit types to avoid bank parsing issues (e.g. need to "entrar y salir" en Excel)
+        Object.keys(ws).forEach(key => {
+            if (key.startsWith('!')) return;
+            const cell = ws[key];
+
+            // Column B: CUIT -> Force text so it doesn't lose precision or formatting
+            if (key.startsWith('B') && key !== 'B1') {
+                cell.t = 's';
+                if (cell.v !== undefined && cell.v !== null) {
+                    cell.v = String(cell.v);
+                }
+            }
+
+            // Column C: Monto -> Force explicit number format (0.00)
+            if (key.startsWith('C') && key !== 'C1') {
+                cell.t = 'n';
+                cell.z = '0.00';
+                if (isNaN(cell.v)) {
+                    cell.v = 0;
+                }
+            }
+        });
+
         const wb = utils.book_new();
         utils.book_append_sheet(wb, ws, "Plantilla para emision");
 
