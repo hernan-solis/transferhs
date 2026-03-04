@@ -176,8 +176,10 @@ export const downloadEcheqFiles = (data) => {
             if (key.startsWith('C') && key !== 'C1') {
                 cell.t = 'n';
                 cell.z = '0.00';
-                if (isNaN(cell.v)) {
+                if (isNaN(cell.v) || isNaN(Number(cell.v))) {
                     cell.v = 0;
+                } else {
+                    cell.v = Number(cell.v);
                 }
             }
         });
